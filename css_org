@@ -1,0 +1,158 @@
+#!/usr/bin/env python
+
+from operator import attrgetter
+import glob
+import argparse
+
+
+def make_parser():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("filename", help="This is the file that you wish to organize. Use 'all' to organize all css files.")
+    parser.add_argument("-o", "--overwrite", action='store_true', help="Activate this flag to overwrite CSS files instead of creating new ones.")
+    return parser.parse_args()
+
+
+class CSSFile:
+    def __init__(self, filename):
+        self.headers = []  # use this for @import statements
+        self.blocks = []
+        self.filename = filename
+        self.new_filename = self.filename.split('.')[0] + '-org.css'
+        self.file = open(self.filename, 'r')
+
+    def headerectomy(self):
+        text = self.file.read()
+        safety_counter = 0
+        while text.find('@charset') >= 0 and safety_counter < 1000:
+            safety_counter += 1
+            tag_start = text.find('@charset')
+            tag_finish = text[tag_start:].find(';') + tag_start + 1
+            self.headers.append(text[tag_start:tag_finish])
+            text = text[:tag_start] + text[tag_finish:]
+        while text.find('@import') >= 0 and safety_counter < 2000:
+            safety_counter += 1
+            tag_start = text.find('@import')
+            tag_finish = text[tag_start:].find(';') + tag_start + 1
+            self.headers.append(text[tag_start:tag_finish])
+            text = text[:tag_start] + text[tag_finish:]
+
+    def blockify(self):
+        text = self.file.read()
+        css_blocks = text.split('}')
+        if css_blocks[-1].strip() == '':
+            css_blocks.pop()
+        selectors = []
+        for block in css_blocks:
+            selector = block[0: block.find('{')].strip()
+            selectors.append(selector)
+            attrs = block[block.find('{') + 1:].split(';')
+            if attrs[-1].strip() == '':
+                attrs.pop()
+            self.blocks.append(CSSBlock(selector, sorted(attrs)))
+        return self.blocks
+
+    def sort_blocks_and_headers(self):
+        # this is ugly and I hate it
+        tag_blocks = []
+        class_blocks = []
+        id_blocks = []
+        for block in self.blocks:
+            if block.type == 'tag':
+                tag_blocks.append(block)
+            elif block.type == 'class':
+                class_blocks.append(block)
+            else:
+                id_blocks.append(block)
+        sorted_headers = sorted(self.headers)
+        tag_blocks = sorted(tag_blocks, key=attrgetter('selector'))
+        class_blocks = sorted(class_blocks, key=attrgetter('selector'))
+        id_blocks = sorted(id_blocks, key=attrgetter('selector'))
+        return sorted_headers + tag_blocks + class_blocks + id_blocks
+
+    def create_organized_file(self):
+        self.headerectomy()
+        self.blockify()
+        org_file = open(self.new_filename, 'w')
+        for b in self.sort_blocks():
+            org_file.write(str(b))
+
+    def create_organized_file_overwrite(self):
+        self.headerectomy()
+        self.blockify()
+        org_file = open(self.filename, 'w')
+        for b in self.sort_blocks():
+            org_file.write(str(b))
+
+
+class CSSBlock:
+
+    def __init__(self, selector, attributes):
+        self.selector = selector
+        if self.selector[0] == '#':
+            self.type = 'id'
+        elif self.selector[0] == '.':
+            self.type = 'class'
+        else:
+            self.type = 'tag'
+        self.attributes = attributes
+
+    def attr_string(self):
+        organized_string = ''
+
+        for attr in self.attributes:
+            attr = attr.strip()
+            organized_string += '  {};\n'.format(attr)
+        return organized_string
+
+    def __str__(self):
+        return self.selector + ' {\n' + self.attr_string() + '}\n\n'
+
+
+def organize_file(filename, overwrite):
+    if filename == 'all':
+        css_file_list = glob.glob('*.css')
+        if len(css_file_list) > 0:
+            if overwrite:
+                for css in css_file_list:
+                    if css.endswith('-org.css'):
+                        pass
+                    else:
+                        cssfile = CSSFile(css)
+                        cssfile.create_organized_file_overwrite()
+                        print('Organized ' + cssfile.filename)
+            else:
+                for css in css_file_list:
+                    if css.endswith('-org.css'):
+                        pass
+                    else:
+                        cssfile = CSSFile(css)
+                        cssfile.create_organized_file()
+                        print('Organized ' + cssfile.filename)
+        else:
+            print("No CSS files in this dir")
+    elif filename.endswith('.css'):
+        if overwrite:
+            cssfile = CSSFile(filename)
+            cssfile.create_organized_file_overwrite()
+            print('Organized ' + filename)
+        else:
+            cssfile = CSSFile(filename)
+            cssfile.create_organized_file()
+            print('Organized ' + filename + ' and saved as ' + cssfile.new_filename)
+    else:
+        print('That isn\'t a CSS file!')
+
+def print_headers(filename):
+    cssfile = CSSFile(filename)
+    cssfile.headerectomy()
+    print cssfile.headers
+
+if __name__ == '__main__':
+    clargs = make_parser()
+    organize_file(clargs.filename, clargs.overwrite)
+
+
+# Things to work on:
+# -@import
+# -@media
+# -\*comments*\
