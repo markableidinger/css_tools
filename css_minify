@@ -1,0 +1,75 @@
+#!/usr/bin/env python
+
+import glob
+import argparse
+
+
+def make_parser():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("filename", help="This is the file that you wish to organize. Use 'all' to organize all css files.")
+    parser.add_argument("-o", "--overwrite", action='store_true', help="Activate this flag to overwrite CSS files instead of creating new ones.")
+    return parser.parse_args()
+
+
+class CSSFile:
+
+    def __init__(self, filename):
+        self.filename = filename
+        self.new_filename = self.filename.split('.')[0] + '.min.css'
+        self.blocks = []
+        self.file = open(self.filename, 'r')
+        self.text = self.file.read()
+
+    def remove_comments(self):
+        while self.text.find('/*') >= 0:
+            open_comment = self.text.find('/*')
+            close_comment = self.text.find('*/')
+            if close_comment == -1:
+                self.text = self.text[:open_comment]
+            else:
+                self.text = self.text[:open_comment] + self.text[close_comment + 2:]
+        print self.text
+
+    def blockify(self):
+        css_blocks = self.text.split('}')
+        print css_blocks
+        if css_blocks[-1].strip() == '':
+            css_blocks.pop()
+        for block in css_blocks:
+            selector = block[0: block.find('{')].strip()
+            attrs = block[block.find('{') + 1:].split(';')
+            if attrs[-1].strip() == '':
+                attrs.pop()
+            self.blocks.append(CSSBlock(selector, sorted(attrs)))
+        print self.blocks
+        return self.blocks
+
+    def create_minified_file(self):
+        self.blockify()
+        print self.blocks
+        min_file = open(self.new_filename, 'w')
+        for b in self.blocks:
+            min_file.write(str(b))
+
+
+class CSSBlock:
+
+    def __init__(self, selector, attributes):
+        self.selector = selector
+        self.attributes = attributes
+
+    def attr_string(self):
+        organized_string = ''
+        for attr in self.attributes:
+            key_val = attr.split(':')
+            key = key_val[0].strip()
+            val = key_val[1].strip()
+            organized_string += '{}:{};'.format(key, val)
+        return organized_string
+
+    def __str__(self):
+        return self.selector + '{' + self.attr_string() + '}'
+
+if __name__ == "__main__":
+    f = CSSFile("sample.css")
+    f.create_minified_file()

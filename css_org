@@ -41,10 +41,8 @@ class CSSFile:
         css_blocks = text.split('}')
         if css_blocks[-1].strip() == '':
             css_blocks.pop()
-        selectors = []
         for block in css_blocks:
             selector = block[0: block.find('{')].strip()
-            selectors.append(selector)
             attrs = block[block.find('{') + 1:].split(';')
             if attrs[-1].strip() == '':
                 attrs.pop()
@@ -73,14 +71,14 @@ class CSSFile:
         self.headerectomy()
         self.blockify()
         org_file = open(self.new_filename, 'w')
-        for b in self.sort_blocks():
+        for b in self.sort_blocks_and_headers():
             org_file.write(str(b))
 
     def create_organized_file_overwrite(self):
         self.headerectomy()
         self.blockify()
         org_file = open(self.filename, 'w')
-        for b in self.sort_blocks():
+        for b in self.sort_blocks_and_headers():
             org_file.write(str(b))
 
 
