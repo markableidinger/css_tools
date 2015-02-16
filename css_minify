@@ -28,25 +28,38 @@ class CSSFile:
                 self.text = self.text[:open_comment]
             else:
                 self.text = self.text[:open_comment] + self.text[close_comment + 2:]
-        print self.text
 
     def blockify(self):
         css_blocks = self.text.split('}')
-        print css_blocks
         if css_blocks[-1].strip() == '':
             css_blocks.pop()
         for block in css_blocks:
             selector = block[0: block.find('{')].strip()
+            selector = self.minify_selector(selector)
             attrs = block[block.find('{') + 1:].split(';')
             if attrs[-1].strip() == '':
                 attrs.pop()
             self.blocks.append(CSSBlock(selector, sorted(attrs)))
-        print self.blocks
         return self.blocks
+
+    def minify_selector(self, selector):
+        valid_punctuation = ['>', ':', ' ', ',']
+        selector = selector.strip()
+        selector.replace('\n', ' ')
+        index = 0
+        while index < len(selector):
+            if selector[index] == ' ':
+                if selector[index + 1] in valid_punctuation or selector[index - 1] in valid_punctuation:
+                    selector = selector[:index] + selector[index + 1:]
+                else:
+                    index += 1
+            else:
+                index += 1
+        return selector
+
 
     def create_minified_file(self):
         self.blockify()
-        print self.blocks
         min_file = open(self.new_filename, 'w')
         for b in self.blocks:
             min_file.write(str(b))

@@ -39,6 +39,7 @@ class CSSFile:
     def blockify(self):
         text = self.file.read()
         css_blocks = text.split('}')
+        selector_list = []
         if css_blocks[-1].strip() == '':
             css_blocks.pop()
         for block in css_blocks:
@@ -46,8 +47,14 @@ class CSSFile:
             attrs = block[block.find('{') + 1:].split(';')
             if attrs[-1].strip() == '':
                 attrs.pop()
+            if selector in selector_list:
+                self.combine_block(selector, attrs)
+            else:
+                selector_list.append(selector)
             self.blocks.append(CSSBlock(selector, sorted(attrs)))
-        return self.blocks
+
+    def combine_block(self, selector, attrs):
+        pass
 
     def sort_blocks_and_headers(self):
         # this is ugly and I hate it
