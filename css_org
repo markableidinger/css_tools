@@ -6,6 +6,9 @@ import argparse
 
 
 def make_parser():
+    """
+    Creates the command line interface
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("filename", help="This is the file that you wish to organize. Use 'all' to organize all css files.")
     parser.add_argument("-o", "--overwrite", action='store_true', help="Activate this flag to overwrite CSS files instead of creating new ones.")
@@ -14,30 +17,37 @@ def make_parser():
 
 class CSSFile:
     def __init__(self, filename):
+        """
+        This object recieves a css filename as input. This filename determines
+        the file to be altered, and contains all of the methods required to
+        organize or minify it.
+        """
         self.headers = []  # use this for @import statements
         self.blocks = []
         self.filename = filename
-        self.new_filename = self.filename.split('.')[0] + '-org.css'
         self.file = open(self.filename, 'r')
+        self.text = self.file.read()
 
-    def headerectomy(self):
-        text = self.file.read()
-        safety_counter = 0
-        while text.find('@charset') >= 0 and safety_counter < 1000:
-            safety_counter += 1
-            tag_start = text.find('@charset')
-            tag_finish = text[tag_start:].find(';') + tag_start + 1
-            self.headers.append(text[tag_start:tag_finish])
-            text = text[:tag_start] + text[tag_finish:]
-        while text.find('@import') >= 0 and safety_counter < 2000:
-            safety_counter += 1
-            tag_start = text.find('@import')
-            tag_finish = text[tag_start:].find(';') + tag_start + 1
-            self.headers.append(text[tag_start:tag_finish])
-            text = text[:tag_start] + text[tag_finish:]
+    def remove_headers(self):
+        """ 
+        Removes @import and @charset lines, storing their value in self.headers
+        """
+        while self.text.find('@charset') >= 0:
+            tag_start = self.text.find('@charset')
+            tag_finish = self.text[tag_start:].find(';') + tag_start + 1
+            self.headers.append(self.text[tag_start:tag_finish] + '\n')
+            self.text = self.text[:tag_start] + self.text[tag_finish:]
+        while self.text.find('@import') >= 0:
+            tag_start = self.text.find('@import')
+            tag_finish = self.text[tag_start:].find(';') + tag_start + 1
+            self.headers.append(self.text[tag_start:tag_finish] + '\n')
+            self.text = self.text[:tag_start] + self.text[tag_finish:]
 
-    def blockify(self):
-        text = self.file.read()
+    def blockify(self, mode):
+        """
+        Breaks down the CSS text into CSSBlock objects
+        """
+        text = self.text
         css_blocks = text.split('}')
         selector_list = []
         if css_blocks[-1].strip() == '':
@@ -51,12 +61,28 @@ class CSSFile:
                 self.combine_block(selector, attrs)
             else:
                 selector_list.append(selector)
-            self.blocks.append(CSSBlock(selector, sorted(attrs)))
+            self.blocks.append(CSSBlock(selector, sorted(attrs), mode))
 
     def combine_block(self, selector, attrs):
+        """
+        Will be used to combine multiple blocks with the same selector.
+        Not Yet implemented.
+        """
+        pass
+
+    def alphabetize_selector(self, selector):
+        """
+        Will be used for cssblocks with multiple selectors. Will alphabetize
+        selectors.
+        Not Yet implemented
+        """
         pass
 
     def sort_blocks_and_headers(self):
+        """
+        Sorts blocks based on selector type, and then alphabetizes the blocks
+        by selector within those categories. Puts sorted headers on top.
+        """
         # this is ugly and I hate it
         tag_blocks = []
         class_blocks = []
@@ -69,29 +95,81 @@ class CSSFile:
             else:
                 id_blocks.append(block)
         sorted_headers = sorted(self.headers)
+        sorted_headers.append('\n')
         tag_blocks = sorted(tag_blocks, key=attrgetter('selector'))
         class_blocks = sorted(class_blocks, key=attrgetter('selector'))
         id_blocks = sorted(id_blocks, key=attrgetter('selector'))
         return sorted_headers + tag_blocks + class_blocks + id_blocks
 
+    def remove_comments(self):
+        """
+        Removes all CSS comments from self.text
+        """
+        while self.text.find('/*') >= 0:
+            open_comment = self.text.find('/*')
+            close_comment = self.text.find('*/')
+            if close_comment == -1:
+                self.text = self.text[:open_comment]
+            else:
+                self.text = self.text[:open_comment] + self.text[close_comment + 2:]
+
+    def minify_selector(self, selector):
+        """
+        Removes all unnecessary punctuation from selectors
+        """
+        valid_punctuation = ['>', ':', ' ', ',']
+        selector = selector.strip()
+        selector.replace('\n', ' ')
+        index = 0
+        while index < len(selector):
+            if selector[index] == ' ':
+                if selector[index + 1] in valid_punctuation or selector[index - 1] in valid_punctuation:
+                    selector = selector[:index] + selector[index + 1:]
+                else:
+                    index += 1
+            else:
+                index += 1
+        return selector
+
     def create_organized_file(self):
-        self.headerectomy()
-        self.blockify()
+        """
+        Organizes a CSS file and saves it under a new name
+        """
+        self.new_filename = self.filename.split('.')[0] + '-org.css'
+        self.remove_headers()
+        self.blockify('org')
         org_file = open(self.new_filename, 'w')
         for b in self.sort_blocks_and_headers():
             org_file.write(str(b))
 
     def create_organized_file_overwrite(self):
-        self.headerectomy()
-        self.blockify()
+        """
+        Organizes a CSS file and overwrites the previous one
+        """
+        self.remove_headers()
+        self.blockify('org')
         org_file = open(self.filename, 'w')
         for b in self.sort_blocks_and_headers():
             org_file.write(str(b))
 
+    def create_minified_file(self):
+        """
+        Minifies a CSS file and saves it under a new name
+        """
+        self.new_filename = self.filename.split('.')[0] + '.min.css'
+        self.blockify('min')
+        min_file = open(self.new_filename, 'w')
+        for b in self.blocks:
+            min_file.write(str(b))
+
 
 class CSSBlock:
 
-    def __init__(self, selector, attributes):
+    def __init__(self, selector, attributes, mode='org'):
+        """
+        Takes in a selector and attribute/value pairs as a list. Also accepts
+        a mode argument that changes the behavior of attribute strings
+        """
         self.selector = selector
         if self.selector[0] == '#':
             self.type = 'id'
@@ -100,17 +178,46 @@ class CSSBlock:
         else:
             self.type = 'tag'
         self.attributes = attributes
+        self.mode = mode
 
-    def attr_string(self):
-        organized_string = ''
-
+    def org_attr_string(self):
+        """
+        Builds up the attribute/value pairs as strings in proper
+        CSS syntax, spacing them vertically for easy reading.
+        """
+        organized_string = ' {\n'
         for attr in self.attributes:
             attr = attr.strip()
             organized_string += '  {};\n'.format(attr)
-        return organized_string
+        return organized_string + '}\n\n'
+
+    def min_attr_string(self):
+        """
+        Builds up the attribute/value pairs as strings in proper
+        CSS syntax, eliminating all unnecessary whitespace characters
+        """
+        organized_string = '{'
+        for attr in self.attributes:
+            key_val = attr.split(':')
+            key = key_val[0].strip()
+            val = key_val[1].strip()
+            organized_string += '{}:{};'.format(key, val)
+        return organized_string + '}'
+
+    def attr_string(self):
+        """
+        Determines which attr_string method is used based on the mode argument
+        """
+        if self.mode == 'org':
+            return self.org_attr_string()
+        else:
+            return self.min_attr_string()
 
     def __str__(self):
-        return self.selector + ' {\n' + self.attr_string() + '}\n\n'
+        """
+        Returns a properly formatted css block as a string based on the mode.
+        """
+        return self.selector + self.attr_string()
 
 
 def organize_file(filename, overwrite):
@@ -147,10 +254,6 @@ def organize_file(filename, overwrite):
     else:
         print('That isn\'t a CSS file!')
 
-def print_headers(filename):
-    cssfile = CSSFile(filename)
-    cssfile.headerectomy()
-    print cssfile.headers
 
 if __name__ == '__main__':
     clargs = make_parser()
@@ -158,6 +261,5 @@ if __name__ == '__main__':
 
 
 # Things to work on:
-# -@import
-# -@media
+# - combining blocks
 # -\*comments*\
